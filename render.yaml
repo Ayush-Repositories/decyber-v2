@@ -11,13 +11,3 @@ services:
         sync: false
       - key: FRONTEND_URL
         sync: false
-
-  - type: static
-    name: decyber-client
-    buildCommand: cd client && npm install && npm run build
-    staticPublishPath: client/dist
-    envVars:
-      - key: VITE_API_URL
-        sync: false
-      - key: VITE_WS_URL
-        sync: false
