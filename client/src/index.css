@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+:root {
+  --neon-green: #39ff14;
+  --dark-bg: #0a0a0a;
+}
+
+body {
+  background-color: var(--dark-bg);
+  color: #ffffff;
+  font-family: 'Inter', sans-serif;
+}
+
+.text-neon {
+  color: var(--neon-green);
+  text-shadow: 0 0 5px var(--neon-green), 0 0 10px var(--neon-green);
+}
