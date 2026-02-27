@@ -93,9 +93,11 @@ export default function QuizQuestion() {
             <div className="mb-3">
               <span className="text-xs uppercase tracking-widest text-[#39ff14]/80">{question.stateName}</span>
             </div>
-            <div className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-white/5 border border-white/10">
-              <img src={question.image} alt={question.stateName} className="w-full h-full object-cover" />
-            </div>
+            {question.stateCode === "IN-TN" && (
+              <div className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-white/5 border border-white/10">
+                <img src="/images/tamilnadu.jpg" alt="Integral" className="w-full h-full object-contain bg-[#0a0a0a]" />
+              </div>
+            )}
           </div>
           <div className="lg:w-[420px] flex flex-col">
             <h2 className="text-2xl font-bold text-white mb-6">{question.title}</h2>
@@ -176,17 +178,6 @@ export default function QuizQuestion() {
                   className="w-full py-3 rounded-lg font-semibold text-lg bg-[#39ff14] text-[#0a0a0a] hover:bg-[#39ff14]/90 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                 >
                   Submit Answer
-                </button>
-                <button
-                  onClick={() => {
-                    if (question && !question.solved && loggedInTeamId) {
-                      submitAnswer(question.id, loggedInTeamId, question.answer);
-                      setFeedback("correct");
-                    }
-                  }}
-                  className="w-full py-2.5 rounded-lg text-sm font-medium border border-dashed border-yellow-500/40 text-yellow-400/70 hover:text-yellow-300 hover:border-yellow-400/60 hover:bg-yellow-500/10 transition-all"
-                >
-                  [DEV] Auto-Solve
                 </button>
               </div>
             )}
