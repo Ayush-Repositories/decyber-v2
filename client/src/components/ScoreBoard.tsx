@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import { useQuizStore } from "../store/useQuizStore";
 
 export function ScoreBoard() {
@@ -24,66 +23,54 @@ export function ScoreBoard() {
         </span>
       </div>
 
-      <LayoutGroup>
-        <div className="space-y-2">
-          <AnimatePresence>
-            {sortedTeams.map((team, index) => {
-              const teamSolved = questions.filter(
-                (q) => q.solvedBy.includes(team.id)
-              ).length;
-              const isLoggedIn = team.id === loggedInTeamId;
+      <div className="space-y-2">
+        {sortedTeams.map((team, index) => {
+          const teamSolved = questions.filter(
+            (q) => q.solvedBy.includes(team.id)
+          ).length;
+          const isLoggedIn = team.id === loggedInTeamId;
 
-              return (
-                <motion.div
-                  key={team.id}
-                  layout
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
-                    isLoggedIn
-                      ? "bg-[#39ff14]/10 border border-[#39ff14]/30"
-                      : "bg-white/5 border border-transparent"
-                  }`}
-                >
-                  <span
-                    className={`text-sm font-bold w-6 text-center ${
-                      index === 0
-                        ? "text-[#39ff14]"
-                        : index === 1
-                        ? "text-yellow-400"
-                        : index === 2
-                        ? "text-orange-400"
-                        : "text-white/40"
-                    }`}
-                  >
-                    #{index + 1}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white font-medium text-sm truncate">
-                      {team.name}
-                    </p>
-                    <p className="text-white/30 text-xs">
-                      {teamSolved} solved
-                    </p>
-                  </div>
-                  <motion.span
-                    key={team.totalScore}
-                    className={`text-lg font-bold tabular-nums ${
-                      isLoggedIn ? "text-[#39ff14]" : "text-white"
-                    }`}
-                    initial={{ scale: 1.2 }}
-                    animate={{ scale: 1 }}
-                  >
-                    {team.totalScore}
-                  </motion.span>
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
-        </div>
-      </LayoutGroup>
+          return (
+            <div
+              key={team.id}
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
+                isLoggedIn
+                  ? "bg-[#39ff14]/10 border border-[#39ff14]/30"
+                  : "bg-white/5 border border-transparent"
+              }`}
+            >
+              <span
+                className={`text-sm font-bold w-6 text-center ${
+                  index === 0
+                    ? "text-[#39ff14]"
+                    : index === 1
+                    ? "text-yellow-400"
+                    : index === 2
+                    ? "text-orange-400"
+                    : "text-white/40"
+                }`}
+              >
+                #{index + 1}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-medium text-sm truncate">
+                  {team.name}
+                </p>
+                <p className="text-white/30 text-xs">
+                  {teamSolved} solved
+                </p>
+              </div>
+              <span
+                className={`text-lg font-bold tabular-nums ${
+                  isLoggedIn ? "text-[#39ff14]" : "text-white"
+                }`}
+              >
+                {team.totalScore}
+              </span>
+            </div>
+          );
+        })}
+      </div>
 
       {sortedTeams.length === 0 && (
         <p className="text-center text-white/30 text-sm py-4">

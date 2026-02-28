@@ -129,9 +129,9 @@ export default function QuizQuestion() {
             </div>
             <div className="flex items-center justify-between mb-6">
               <span className="text-sm text-white/60">{solveCount}/{MAX_SOLVES} solved</span>
-              <motion.span key={question.currentScore} className="text-3xl font-bold text-[#39ff14]" initial={{ scale: 1.3 }} animate={{ scale: 1 }}>
+              <span className="text-3xl font-bold text-[#39ff14]">
                 {question.currentScore} pts
-              </motion.span>
+              </span>
             </div>
             {solverTeams.length > 0 && (
               <div className="mb-6 space-y-1.5">
