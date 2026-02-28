@@ -188,6 +188,7 @@ export const useQuizStore = create<QuizState>()(
 
       submitAnswer: async (questionId, answer) => {
         const result = await apiService.submitAnswer(questionId, answer);
+        console.log("[submitAnswer] response:", JSON.stringify(result));
         // Server handles everything; WS broadcast will update state
         return result.result;
       },

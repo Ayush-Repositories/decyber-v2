@@ -215,14 +215,13 @@ router.post(
     );
     const newSolved = isFullySolved(newSolvedBy.length);
 
-    const currentSolvedByJson = JSON.stringify(solvedBy);
     const updated = await sql`
       UPDATE questions
       SET solved_by = ${newSolvedBy as any},
           current_score = ${newCurrentScore},
           solved = ${newSolved}
       WHERE id = ${id}
-        AND solved_by::text = ${currentSolvedByJson}
+        AND array_length(solved_by, 1) IS NOT DISTINCT FROM ${solvedBy.length === 0 ? null : solvedBy.length}
       RETURNING id
     `;
 
