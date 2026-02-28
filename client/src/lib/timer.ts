@@ -1,4 +1,4 @@
-const MAX_SOLVES = 5;
+const MAX_SOLVES = 3;
 
 export function scoreForNthSolve(maxScore: number, solveIndex: number): number {
   if (solveIndex >= MAX_SOLVES) return 0;

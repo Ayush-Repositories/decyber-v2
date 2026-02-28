@@ -19,7 +19,8 @@ export function connectWS() {
         useQuizStore.getState().setServerState(
           data.teams,
           data.questions,
-          data.gameSettings
+          data.gameSettings,
+          data.serverNow
         );
       }
     } catch (err) {

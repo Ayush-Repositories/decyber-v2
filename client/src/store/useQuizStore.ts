@@ -1,14 +1,12 @@
 import { useState, useEffect } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { scoreForNthSolve, nextSolveScore, isFullySolved } from "../lib/timer";
 import * as apiService from "../lib/api";
 
 export type Team = {
   id: string;
   name: string;
   totalScore: number;
-  passcode: string;
   loggedIn: boolean;
 };
 
@@ -18,7 +16,6 @@ export type Question = {
   stateName: string;
   title: string;
   image: string;
-  answer: string;
   hint: string;
   maxScore: number;
   currentScore: number;
@@ -36,6 +33,7 @@ type QuizState = {
   teams: Team[];
   questions: Question[];
   loggedInTeamId: string | null;
+  sessionToken: string | null;
   teamsLoaded: boolean;
   questionsLoaded: boolean;
 
@@ -45,7 +43,7 @@ type QuizState = {
   serverTimeOffset: number;
 
   // WS state push
-  setServerState: (teams: Team[], questions: Question[], gameSettings: GameSettingsWS) => void;
+  setServerState: (teams: Team[], questions: Question[], gameSettings: GameSettingsWS, serverNow?: number) => void;
 
   // Team actions
   fetchTeams: () => Promise<void>;
@@ -60,10 +58,10 @@ type QuizState = {
 
   // Questions
   fetchQuestions: () => Promise<void>;
-  submitAnswer: (questionId: string, teamId: string, answer: string) => "correct" | "wrong" | "already" | "solved" | "inactive";
+  submitAnswer: (questionId: string, answer: string) => Promise<"correct" | "wrong" | "already" | "solved" | "inactive" | "retry">;
   resetQuestion: (questionId: string) => Promise<void>;
-  updateQuestion: (questionId: string, updates: Partial<Pick<Question, "title" | "answer" | "image" | "maxScore" | "hint">>) => Promise<void>;
-  addQuestion: (question: Omit<Question, "currentScore" | "solved" | "solvedBy">) => Promise<void>;
+  updateQuestion: (questionId: string, updates: Partial<Pick<Question, "title" | "image" | "maxScore" | "hint"> & { answer: string }>) => Promise<void>;
+  addQuestion: (question: Omit<Question, "currentScore" | "solved" | "solvedBy"> & { answer: string }) => Promise<void>;
   deleteQuestion: (questionId: string) => Promise<void>;
 
   // Game timer
@@ -80,6 +78,7 @@ export const useQuizStore = create<QuizState>()(
       teams: [],
       questions: [],
       loggedInTeamId: null,
+      sessionToken: null,
       teamsLoaded: false,
       questionsLoaded: false,
       gameActive: false,
@@ -87,13 +86,16 @@ export const useQuizStore = create<QuizState>()(
       timerDurationMinutes: 30,
       serverTimeOffset: 0,
 
-      setServerState: (teams, questions, gameSettings) => {
-        const offset = get().serverTimeOffset;
-        const serverNow = Date.now() + offset;
+      setServerState: (teams, questions, gameSettings, serverNow) => {
+        let offset = get().serverTimeOffset;
+        if (serverNow) {
+          offset = serverNow - Date.now();
+        }
+        const now = Date.now() + offset;
         const active =
           gameSettings.timerRunning &&
           !!gameSettings.timerEndsAt &&
-          new Date(gameSettings.timerEndsAt).getTime() > serverNow;
+          new Date(gameSettings.timerEndsAt).getTime() > now;
         set({
           teams,
           questions,
@@ -102,6 +104,7 @@ export const useQuizStore = create<QuizState>()(
           gameActive: active,
           timerEndsAt: gameSettings.timerEndsAt,
           timerDurationMinutes: gameSettings.timerDurationMinutes,
+          serverTimeOffset: offset,
         });
       },
 
@@ -139,24 +142,28 @@ export const useQuizStore = create<QuizState>()(
       },
 
       loginTeam: async (teamName, passcode) => {
-        const { result, team } = await apiService.loginTeam(teamName, passcode);
-        if (result === "success" && team) {
+        const data = await apiService.loginTeam(teamName, passcode);
+        if (data.result === "success" && data.team && data.sessionToken) {
+          apiService.setSessionToken(data.sessionToken);
           set((s) => ({
-            loggedInTeamId: team.id,
-            teams: s.teams.map((t) => (t.id === team.id ? team : t)),
+            loggedInTeamId: data.team!.id,
+            sessionToken: data.sessionToken!,
+            teams: s.teams.map((t) => (t.id === data.team!.id ? data.team! : t)),
           }));
         }
-        return result;
+        return data.result;
       },
 
       logoutTeam: () => {
-        set({ loggedInTeamId: null });
+        apiService.setSessionToken(null);
+        set({ loggedInTeamId: null, sessionToken: null });
       },
 
       resetTeamLogin: async (teamId) => {
         await apiService.resetTeamLogin(teamId);
         set((s) => ({
           loggedInTeamId: s.loggedInTeamId === teamId ? null : s.loggedInTeamId,
+          sessionToken: s.loggedInTeamId === teamId ? null : s.sessionToken,
           teams: s.teams.map((t) =>
             t.id === teamId ? { ...t, loggedIn: false } : t
           ),
@@ -169,7 +176,8 @@ export const useQuizStore = create<QuizState>()(
         try {
           const { exists, loggedIn } = await apiService.checkTeamStatus(loggedInTeamId);
           if (!exists || !loggedIn) {
-            set({ loggedInTeamId: null });
+            apiService.setSessionToken(null);
+            set({ loggedInTeamId: null, sessionToken: null });
             return false;
           }
           return true;
@@ -178,118 +186,30 @@ export const useQuizStore = create<QuizState>()(
         }
       },
 
-      submitAnswer: (questionId, teamId, answer) => {
-        const state = get();
-        if (!state.gameActive) return "inactive";
-        const question = state.questions.find((q) => q.id === questionId);
-        if (!question) return "solved";
-        if (question.solved) return "solved";
-        if (question.solvedBy.includes(teamId)) return "already";
-
-        const normalized = answer.trim();
-        const stored = question.answer;
-
-        let isCorrect = false;
-        if (stored.startsWith("!reject:")) {
-          const rejected = stored.slice(8).split("|").map((s) => s.toLowerCase());
-          isCorrect = normalized.length > 0 && !rejected.includes(normalized.toLowerCase());
-        } else if (stored.includes("|")) {
-          isCorrect = stored.split("|").some((a) => a === normalized);
-        } else {
-          isCorrect = normalized === stored;
-        }
-
-        if (!isCorrect) {
-          const penalty = Math.round(question.maxScore * 0.1);
-          const team = state.teams.find((t) => t.id === teamId);
-          if (team && penalty > 0) {
-            const newTotalScore = Math.max(0, team.totalScore - penalty);
-            set((s) => ({
-              teams: s.teams.map((t) =>
-                t.id === teamId ? { ...t, totalScore: newTotalScore } : t
-              ),
-            }));
-            apiService.updateTeamScore(teamId, newTotalScore).catch(console.error);
-          }
-          return "wrong";
-        }
-
-        const earnedScore = scoreForNthSolve(question.maxScore, question.solvedBy.length);
-        const newSolvedBy = [...question.solvedBy, teamId];
-        const newCurrentScore = nextSolveScore(question.maxScore, newSolvedBy.length);
-        const newSolved = isFullySolved(newSolvedBy.length);
-
-        const team = state.teams.find((t) => t.id === teamId);
-        const newTotalScore = (team?.totalScore ?? 0) + earnedScore;
-
-        set((s) => ({
-          questions: s.questions.map((q) =>
-            q.id === questionId
-              ? { ...q, solvedBy: newSolvedBy, currentScore: newCurrentScore, solved: newSolved }
-              : q
-          ),
-          teams: s.teams.map((t) =>
-            t.id === teamId ? { ...t, totalScore: t.totalScore + earnedScore } : t
-          ),
-        }));
-
-        apiService.updateTeamScore(teamId, newTotalScore).catch(console.error);
-        apiService.submitQuestionAnswer(questionId, newSolvedBy, newCurrentScore, newSolved).catch(console.error);
-
-        return "correct";
+      submitAnswer: async (questionId, answer) => {
+        const result = await apiService.submitAnswer(questionId, answer);
+        // Server handles everything; WS broadcast will update state
+        return result.result;
       },
 
       resetQuestion: async (questionId) => {
-        const state = get();
-        const question = state.questions.find((q) => q.id === questionId);
-        if (!question) return;
-
-        const scoreByTeam = new Map<string, number>();
-        question.solvedBy.forEach((teamId, index) => {
-          const earned = scoreForNthSolve(question.maxScore, index);
-          scoreByTeam.set(teamId, (scoreByTeam.get(teamId) ?? 0) + earned);
-        });
-
-        const updatedTeams = state.teams.map((t) => {
-          const deduct = scoreByTeam.get(t.id) ?? 0;
-          return deduct > 0 ? { ...t, totalScore: Math.max(0, t.totalScore - deduct) } : t;
-        });
-
-        set({
-          teams: updatedTeams,
-          questions: state.questions.map((q) =>
-            q.id === questionId ? { ...q, solved: false, solvedBy: [], currentScore: q.maxScore } : q
-          ),
-        });
-
-        await apiService.resetQuestion(questionId, question.maxScore);
-        for (const [teamId, deduct] of scoreByTeam) {
-          if (deduct > 0) {
-            const team = updatedTeams.find((t) => t.id === teamId);
-            if (team) apiService.updateTeamScore(teamId, team.totalScore).catch(console.error);
-          }
-        }
+        await apiService.resetQuestion(questionId, 0);
+        // Server handles score deduction and WS broadcast updates state
       },
 
       updateQuestion: async (questionId, updates) => {
         await apiService.updateQuestion(questionId, updates);
-        set((state) => ({
-          questions: state.questions.map((q) =>
-            q.id === questionId
-              ? { ...q, ...updates, currentScore: updates.maxScore !== undefined ? updates.maxScore : q.currentScore }
-              : q
-          ),
-        }));
+        // WS broadcast will update state
       },
 
       addQuestion: async (question) => {
-        const created = await apiService.addQuestion(question);
-        set((state) => ({ questions: [...state.questions, created] }));
+        await apiService.addQuestion(question);
+        // WS broadcast will update state
       },
 
       deleteQuestion: async (questionId) => {
         await apiService.deleteQuestion(questionId);
-        set((state) => ({ questions: state.questions.filter((q) => q.id !== questionId) }));
+        // WS broadcast will update state
       },
 
       fetchGameSettings: async () => {
@@ -333,24 +253,32 @@ export const useQuizStore = create<QuizState>()(
       },
 
       resetGame: () => {
-        set({ loggedInTeamId: null });
+        apiService.setSessionToken(null);
+        set({ loggedInTeamId: null, sessionToken: null });
       },
     }),
     {
       name: "decyber-quiz-store",
-      version: 7,
+      version: 8,
       migrate() {
         return {
           teams: [],
           questions: [],
           loggedInTeamId: null,
+          sessionToken: null,
           teamsLoaded: false,
           questionsLoaded: false,
         } as unknown as QuizState;
       },
       partialize: (state) => ({
         loggedInTeamId: state.loggedInTeamId,
+        sessionToken: state.sessionToken,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (state?.sessionToken) {
+          apiService.setSessionToken(state.sessionToken);
+        }
+      },
     }
   )
 );

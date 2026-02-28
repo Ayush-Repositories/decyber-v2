@@ -2,6 +2,9 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuizStore, type Question } from "../store/useQuizStore";
 import { GameTimer } from "../components/GameTimer";
+import * as apiService from "../lib/api";
+
+type AdminQuestion = Question & { answer: string };
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -9,8 +12,9 @@ export default function Admin() {
   const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    const auth = sessionStorage.getItem("decyber-admin-auth");
-    if (auth === "true") {
+    const token = sessionStorage.getItem("decyber-admin-token");
+    if (token) {
+      apiService.setAdminToken(token);
       setAuthorized(true);
     } else {
       navigate("/admin/login", { replace: true });
@@ -33,7 +37,6 @@ function AdminContent() {
   const navigate = useNavigate();
 
   const teams = useQuizStore((s) => s.teams);
-  const questions = useQuizStore((s) => s.questions);
   const addTeam = useQuizStore((s) => s.addTeam);
   const removeTeam = useQuizStore((s) => s.removeTeam);
   const resetQuestion = useQuizStore((s) => s.resetQuestion);
@@ -44,6 +47,28 @@ function AdminContent() {
   const gameActive = useQuizStore((s) => s.gameActive);
   const startGame = useQuizStore((s) => s.startGame);
   const stopGame = useQuizStore((s) => s.stopGame);
+
+  // Admin questions (with answers) fetched separately
+  const [adminQuestions, setAdminQuestions] = useState<AdminQuestion[]>([]);
+
+  const fetchAdminQs = async () => {
+    try {
+      const qs = await apiService.fetchAdminQuestions();
+      setAdminQuestions(qs);
+    } catch (err) {
+      console.error("Failed to fetch admin questions:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchAdminQs();
+  }, []);
+
+  // Re-fetch admin questions when store questions change (WS broadcast)
+  const storeQuestions = useQuizStore((s) => s.questions);
+  useEffect(() => {
+    fetchAdminQs();
+  }, [storeQuestions]);
 
   const [timerDuration, setTimerDuration] = useState(30);
   const [timerLoading, setTimerLoading] = useState(false);
@@ -60,7 +85,8 @@ function AdminContent() {
   });
 
   const handleLogout = () => {
-    sessionStorage.removeItem("decyber-admin-auth");
+    sessionStorage.removeItem("decyber-admin-token");
+    apiService.setAdminToken(null);
     navigate("/admin/login", { replace: true });
   };
 
@@ -92,7 +118,7 @@ function AdminContent() {
     }
   };
 
-  const startEditing = (q: Question) => {
+  const startEditing = (q: AdminQuestion) => {
     setEditingId(q.id);
     setEditForm({ title: q.title, answer: q.answer, image: q.image, maxScore: q.maxScore, hint: q.hint });
   };
@@ -195,7 +221,7 @@ function AdminContent() {
                   <div className="flex-1 min-w-0">
                     <span className="text-white text-sm">{team.name} <span className="text-white/40 text-xs">({team.totalScore} pts)</span></span>
                     <div className="text-xs text-white/30 mt-0.5">
-                      Passcode: <span className="text-white/50 font-mono">{team.passcode}</span> &middot; {team.loggedIn ? <span className="text-yellow-400">Logged in</span> : <span className="text-white/30">Not logged in</span>}
+                      {team.loggedIn ? <span className="text-yellow-400">Logged in</span> : <span className="text-white/30">Not logged in</span>}
                     </div>
                   </div>
                   <div className="flex gap-2 shrink-0">
@@ -234,7 +260,7 @@ function AdminContent() {
             </div>
           )}
           <div className="space-y-2">
-            {questions.map((q) => (
+            {adminQuestions.map((q) => (
               <div key={q.id} className="rounded-xl bg-white/5 border border-white/10 p-4">
                 {editingId === q.id ? (
                   <div className="space-y-3">

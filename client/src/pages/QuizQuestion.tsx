@@ -2,7 +2,8 @@ import { useState, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuizStore, useHasHydrated } from "../store/useQuizStore";
-import { MAX_SOLVES } from "../lib/timer";
+
+const MAX_SOLVES = 3;
 
 export default function QuizQuestion() {
   const { stateCode } = useParams<{ stateCode: string }>();
@@ -24,6 +25,7 @@ export default function QuizQuestion() {
 
   const [answer, setAnswer] = useState("");
   const [feedback, setFeedback] = useState<"correct" | "wrong" | "already" | "solved" | "inactive" | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const penaltyAmount = question ? Math.round(question.maxScore * 0.1) : 0;
 
   useEffect(() => {
@@ -41,14 +43,28 @@ export default function QuizQuestion() {
     return () => clearInterval(interval);
   }, [hasHydrated, loggedInTeamId, checkSession, navigate]);
 
-  const handleSubmit = useCallback(() => {
-    if (!question || !answer.trim() || !loggedInTeamId || question.solved || !gameActive) return;
-    const result = submitAnswer(question.id, loggedInTeamId, answer);
-    setFeedback(result);
-    if (result !== "correct") {
+  const handleSubmit = useCallback(async () => {
+    if (!question || !answer.trim() || !loggedInTeamId || question.solved || !gameActive || submitting) return;
+    setSubmitting(true);
+    try {
+      const result = await submitAnswer(question.id, answer);
+      if (result === "retry") {
+        // Race condition — retry once
+        const retryResult = await submitAnswer(question.id, answer);
+        setFeedback(retryResult === "retry" ? "wrong" : retryResult as any);
+      } else {
+        setFeedback(result as any);
+      }
+      if (result !== "correct") {
+        setTimeout(() => setFeedback(null), 1500);
+      }
+    } catch {
+      setFeedback("wrong");
       setTimeout(() => setFeedback(null), 1500);
+    } finally {
+      setSubmitting(false);
     }
-  }, [answer, loggedInTeamId, question, submitAnswer, gameActive]);
+  }, [answer, loggedInTeamId, question, submitAnswer, gameActive, submitting]);
 
   if (!hasHydrated || !teamsLoaded || !questionsLoaded || !loggedInTeamId) return null;
 
@@ -148,6 +164,7 @@ export default function QuizQuestion() {
                     placeholder="Type your answer..."
                     className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:outline-none focus:border-[#39ff14]/50 transition-colors"
                     autoFocus
+                    disabled={submitting}
                   />
                 </div>
                 <AnimatePresence>
@@ -174,10 +191,10 @@ export default function QuizQuestion() {
                 )}
                 <button
                   onClick={handleSubmit}
-                  disabled={!answer.trim() || !gameActive}
+                  disabled={!answer.trim() || !gameActive || submitting}
                   className="w-full py-3 rounded-lg font-semibold text-lg bg-[#39ff14] text-[#0a0a0a] hover:bg-[#39ff14]/90 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                 >
-                  Submit Answer
+                  {submitting ? "Submitting..." : "Submit Answer"}
                 </button>
               </div>
             )}

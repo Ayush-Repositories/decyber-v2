@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
+import * as apiService from "../lib/api";
 
 const BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
@@ -42,20 +43,12 @@ export default function RoundOne() {
   const processSubmission = useCallback(async () => {
     if (!teamId || submitting || completed) return;
     setSubmitting(true);
-    let roundScore = 0;
-    const submissionData = questions.map((q) => {
-      const submittedAnswer = answers[q.id] || "";
-      const isCorrect = submittedAnswer.toLowerCase().trim() === (q.correct_answer || q.answer || "").toLowerCase().trim();
-      const points = isCorrect ? (q.point_value || q.maxScore || 0) : 0;
-      roundScore += points;
-      return { questionId: q.id, submittedAnswer, isCorrect, pointsAwarded: points };
-    });
+    const answerData = questions.map((q) => ({
+      questionId: q.id,
+      submittedAnswer: answers[q.id] || "",
+    }));
     try {
-      await fetch(`${BASE}/api/submissions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ teamId, submissions: submissionData }),
-      });
+      await apiService.submitRoundOne(answerData);
     } catch { /* ignore */ }
     setCompleted(true);
     setSubmitting(false);

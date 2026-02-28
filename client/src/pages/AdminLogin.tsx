@@ -23,8 +23,8 @@ export default function AdminLogin() {
         body: JSON.stringify({ key: password }),
       });
       const data = await res.json();
-      if (data.ok) {
-        sessionStorage.setItem("decyber-admin-auth", "true");
+      if (data.ok && data.token) {
+        sessionStorage.setItem("decyber-admin-token", data.token);
         navigate("/admin");
       } else {
         setError("ACCESS DENIED: INVALID ADMIN KEY");

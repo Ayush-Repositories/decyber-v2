@@ -4,6 +4,7 @@ import cors from "cors";
 import { createServer } from "http";
 import { WebSocketServer } from "ws";
 import { addClient, broadcastState } from "./ws.js";
+import { sql } from "./db.js";
 import teamsRouter from "./routes/teams.js";
 import questionsRouter from "./routes/questions.js";
 import gameRouter from "./routes/game.js";
@@ -27,11 +28,22 @@ const wss = new WebSocketServer({ server });
 
 wss.on("connection", (ws) => {
   addClient(ws);
-  // Send initial state to newly connected client
   broadcastState();
 });
 
-server.listen(Number(PORT), "0.0.0.0", () => {
-  console.log(`Server running on http://0.0.0.0:${PORT}`);
-  console.log(`WebSocket running on ws://0.0.0.0:${PORT}`);
+// Run migrations then start server
+async function start() {
+  // Add session_token column if it doesn't exist
+  await sql`ALTER TABLE teams ADD COLUMN IF NOT EXISTS session_token TEXT`;
+  console.log("Migration: session_token column ensured");
+
+  server.listen(Number(PORT), "0.0.0.0", () => {
+    console.log(`Server running on http://0.0.0.0:${PORT}`);
+    console.log(`WebSocket running on ws://0.0.0.0:${PORT}`);
+  });
+}
+
+start().catch((err) => {
+  console.error("Failed to start server:", err);
+  process.exit(1);
 });

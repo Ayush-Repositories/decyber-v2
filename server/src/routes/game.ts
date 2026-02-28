@@ -1,6 +1,8 @@
 import { Router, Request, Response } from "express";
+import crypto from "crypto";
 import { sql } from "../db.js";
 import { broadcastState } from "../ws.js";
+import { requireAdmin, addAdminToken } from "../middleware.js";
 
 const router = Router();
 
@@ -21,8 +23,8 @@ router.get("/settings", async (_req: Request, res: Response) => {
   });
 });
 
-// POST /api/game/start
-router.post("/start", async (req: Request, res: Response) => {
+// POST /api/game/start — protected
+router.post("/start", requireAdmin, async (req: Request, res: Response) => {
   const { durationMinutes } = req.body;
   await sql`
     UPDATE game_settings
@@ -35,8 +37,8 @@ router.post("/start", async (req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
-// POST /api/game/stop
-router.post("/stop", async (_req: Request, res: Response) => {
+// POST /api/game/stop — protected
+router.post("/stop", requireAdmin, async (_req: Request, res: Response) => {
   await sql`
     UPDATE game_settings
     SET timer_running = false, timer_ends_at = null
@@ -46,17 +48,19 @@ router.post("/stop", async (_req: Request, res: Response) => {
   res.json({ ok: true });
 });
 
-// GET /api/server-time (kept for backward compat, also mounted in index)
+// GET /api/server-time
 router.get("/server-time", async (_req: Request, res: Response) => {
   const [row] = await sql`SELECT now() AS server_now`;
   res.json({ serverNow: new Date(row.server_now as string).getTime() });
 });
 
-// POST /api/admin/verify
+// POST /api/admin/verify — returns a bearer token
 router.post("/admin/verify", (req: Request, res: Response) => {
   const { key } = req.body;
   if (key === process.env.ADMIN_KEY) {
-    res.json({ ok: true });
+    const token = crypto.randomUUID();
+    addAdminToken(token);
+    res.json({ ok: true, token });
   } else {
     res.status(401).json({ ok: false, error: "Invalid admin key" });
   }
