@@ -189,6 +189,7 @@ router.post(
 
     const storedAnswer = question.answer as string;
     const isCorrect = checkAnswer(answer, storedAnswer);
+    console.log(`[answer] submitted="${answer}" stored="${storedAnswer}" isCorrect=${isCorrect}`);
 
     if (!isCorrect) {
       const penalty = Math.round(
