@@ -195,7 +195,7 @@ router.post(
         (question.max_score as number) * WRONG_ANSWER_PENALTY_FRACTION
       );
       if (penalty > 0) {
-        await sql`UPDATE teams SET total_score = GREATEST(0, total_score - ${penalty}) WHERE id = ${teamId}`;
+        await sql`UPDATE teams SET total_score = total_score - ${penalty} WHERE id = ${teamId}`;
       }
       await broadcastState();
       res.json({ result: "wrong", penalty });
